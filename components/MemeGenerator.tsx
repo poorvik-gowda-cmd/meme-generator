@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Download, Share2, ArrowLeft, Loader, Sparkles } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 interface MemeGeneratorProps {
   onBack: () => void;
@@ -31,8 +32,8 @@ export default function MemeGenerator({ onBack, onMemeGenerated }: MemeGenerator
     }
 
     setIsGenerating(true);
-    // Simulate API call
-    setTimeout(() => {
+    // Simulate API call delay for effect
+    setTimeout(async () => {
       // Create a mock meme image with canvas
       const canvas = document.createElement('canvas');
       canvas.width = 600;
@@ -66,6 +67,31 @@ export default function MemeGenerator({ onBack, onMemeGenerated }: MemeGenerator
 
       const memeUrl = canvas.toDataURL();
       setGeneratedMeme(memeUrl);
+
+      // Save to Supabase
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { error } = await supabase
+            .from('memes')
+            .insert([
+              {
+                user_id: user.id,
+                image_url: memeUrl,
+                caption: prompt,
+                template: template,
+                creator: user.user_metadata?.full_name || user.email,
+              },
+            ]);
+          
+          if (error) {
+            console.error('Error saving meme:', error);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to save to Supabase:', err);
+      }
+
       onMemeGenerated?.({ prompt, template, url: memeUrl });
       setIsGenerating(false);
     }, 1500);

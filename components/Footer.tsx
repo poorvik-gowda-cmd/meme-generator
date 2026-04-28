@@ -1,7 +1,7 @@
 import { Facebook, Twitter, Instagram, Github } from 'lucide-react';
 
 interface FooterProps {
-  onNavigate?: (section: 'home' | 'generator' | 'leaderboard') => void;
+  onNavigate?: (section: 'home' | 'generator' | 'history') => void;
 }
 
 export default function Footer({ onNavigate }: FooterProps) {
@@ -30,8 +30,8 @@ export default function Footer({ onNavigate }: FooterProps) {
                 </button>
               </li>
               <li>
-                <button onClick={() => onNavigate?.('leaderboard')} className="hover:text-foreground transition">
-                  Leaderboard
+                <button onClick={() => onNavigate?.('history')} className="hover:text-foreground transition">
+                  History
                 </button>
               </li>
             </ul>

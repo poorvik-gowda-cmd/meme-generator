@@ -1,111 +1,73 @@
 'use client';
 
-import { useState } from 'react';
-import { ThumbsUp, Share2, ArrowLeft, Trophy, Flame } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ThumbsUp, Share2, ArrowLeft, Trophy, Flame, Loader2, Image as ImageIcon } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 interface Meme {
   id: string;
-  caption: string;
+  caption?: string;
   votes: number;
-  creator: string;
-  template: string;
-  timestamp: string;
-  trending: boolean;
+  creator?: string;
+  template?: string;
+  image_url: string;
+  created_at: string;
 }
-
-const mockMemes: Meme[] = [
-  {
-    id: '1',
-    caption: 'Me pretending to work while my boss walks by',
-    votes: 342,
-    creator: '@CoderLife',
-    template: 'pappu',
-    timestamp: '2 hours ago',
-    trending: true,
-  },
-  {
-    id: '2',
-    caption: 'When someone says "one more thing" at 5 PM',
-    votes: 289,
-    creator: '@OfficeJokes',
-    template: 'gali',
-    timestamp: '4 hours ago',
-    trending: true,
-  },
-  {
-    id: '3',
-    caption: 'Trying to hide my tears while nodding in the meeting',
-    votes: 267,
-    creator: '@MemeKing',
-    template: 'alia',
-    timestamp: '6 hours ago',
-    trending: false,
-  },
-  {
-    id: '4',
-    caption: 'My expectations vs reality when I apply for jobs',
-    votes: 234,
-    creator: '@TechMemes',
-    template: 'kabali',
-    timestamp: '8 hours ago',
-    trending: false,
-  },
-  {
-    id: '5',
-    caption: 'When your code works on the first try',
-    votes: 198,
-    creator: '@CodeNinja',
-    template: 'hrithik',
-    timestamp: '10 hours ago',
-    trending: false,
-  },
-  {
-    id: '6',
-    caption: 'POV: You&apos;re a junior dev and senior says "it&apos;s an easy task"',
-    votes: 167,
-    creator: '@DeveloperLife',
-    template: 'disha',
-    timestamp: '12 hours ago',
-    trending: false,
-  },
-];
 
 interface LeaderboardProps {
   onBack: () => void;
 }
 
 export default function Leaderboard({ onBack }: LeaderboardProps) {
-  const [userVotes, setUserVotes] = useState<Set<string>>(new Set());
-  const [memes, setMemes] = useState(mockMemes);
-  const [filter, setFilter] = useState<'all' | 'trending'>('all');
+  const [memes, setMemes] = useState<Meme[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'all' | 'recent'>('all');
 
-  const handleVote = (memeId: string) => {
-    const newVotes = new Set(userVotes);
-    const meme = memes.find(m => m.id === memeId);
+  useEffect(() => {
+    fetchMemes();
+  }, []);
 
-    if (newVotes.has(memeId) && meme) {
-      newVotes.delete(memeId);
-      setMemes(memes.map(m =>
-        m.id === memeId ? { ...m, votes: m.votes - 1 } : m
-      ));
-    } else if (meme) {
-      newVotes.add(memeId);
-      setMemes(memes.map(m =>
-        m.id === memeId ? { ...m, votes: m.votes + 1 } : m
-      ));
+  const fetchMemes = async () => {
+    setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('memes')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setMemes(data || []);
+    } catch (error) {
+      console.error('Error fetching memes:', error);
+    } finally {
+      setLoading(false);
     }
-    setUserVotes(newVotes);
   };
 
-  const filteredMemes = filter === 'trending' 
-    ? memes.filter(m => m.trending).sort((a, b) => b.votes - a.votes)
-    : memes.sort((a, b) => b.votes - a.votes);
+  const handleVote = async (memeId: string) => {
+    // Optimistic update
+    setMemes(memes.map(m => 
+      m.id === memeId ? { ...m, votes: (m.votes || 0) + 1 } : m
+    ));
 
-  const topCreators = [
-    { name: 'CoderLife', memes: 45, votes: 3421 },
-    { name: 'MemeKing', memes: 38, votes: 2987 },
-    { name: 'TechMemes', memes: 32, votes: 2654 },
-  ];
+    try {
+      const { error } = await supabase.rpc('increment_votes', { meme_id: memeId });
+      if (error) {
+        // If RPC doesn't exist, try a simple update
+        const meme = memes.find(m => m.id === memeId);
+        await supabase
+          .from('memes')
+          .update({ votes: (meme?.votes || 0) + 1 })
+          .eq('id', memeId);
+      }
+    } catch (err) {
+      console.error('Vote failed:', err);
+    }
+  };
 
   return (
     <div className="min-h-screen py-20 px-4 bg-gradient-to-b from-background via-background to-background">
@@ -121,154 +83,125 @@ export default function Leaderboard({ onBack }: LeaderboardProps) {
           <div>
             <h1 className="text-4xl font-bold flex items-center gap-3">
               <Trophy size={36} className="text-yellow-500" />
-              Meme Leaderboard
+              Meme History
             </h1>
-            <p className="text-muted-foreground">See what&apos;s trending in our community</p>
+            <p className="text-muted-foreground">Your collection of AI-generated masterpieces</p>
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-4 gap-8">
-          {/* Main Leaderboard */}
-          <div className="lg:col-span-3">
-            {/* Filter Tabs */}
-            <div className="flex gap-3 mb-8">
-              <button
-                onClick={() => setFilter('all')}
-                className={`px-6 py-2 rounded-lg font-semibold transition-all ${
-                  filter === 'all'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'border border-border text-foreground hover:border-primary'
-                }`}
-              >
-                All Memes
-              </button>
-              <button
-                onClick={() => setFilter('trending')}
-                className={`px-6 py-2 rounded-lg font-semibold transition-all flex items-center gap-2 ${
-                  filter === 'trending'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'border border-border text-foreground hover:border-primary'
-                }`}
-              >
-                <Flame size={18} />
-                Trending Now
-              </button>
-            </div>
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <Loader2 className="w-12 h-12 text-primary animate-spin" />
+            <p className="text-muted-foreground animate-pulse">Fetching your memes...</p>
+          </div>
+        ) : (
+          <div className="grid lg:grid-cols-4 gap-8">
+            {/* Main Content */}
+            <div className="lg:col-span-3">
+              {memes.length === 0 ? (
+                <div className="text-center py-20 border-2 border-dashed border-white/10 rounded-2xl">
+                  <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-muted mb-6">
+                    <ImageIcon className="w-10 h-10 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-xl font-bold mb-2">No memes yet</h3>
+                  <p className="text-muted-foreground mb-8">Start creating your first meme using AI!</p>
+                  <button
+                    onClick={onBack}
+                    className="bg-primary text-primary-foreground px-8 py-3 rounded-lg font-semibold hover:opacity-90 transition"
+                  >
+                    Go to Generator
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {memes.map((meme, index) => (
+                    <div
+                      key={meme.id}
+                      className="p-6 rounded-2xl border border-white/10 bg-card/50 backdrop-blur-sm hover:border-primary/50 transition-all group overflow-hidden"
+                    >
+                      <div className="flex gap-6 items-start">
+                        {/* Meme Image Preview */}
+                        <div className="w-32 h-32 rounded-xl overflow-hidden bg-muted flex-shrink-0 border border-white/5 group-hover:scale-105 transition-transform">
+                          <img 
+                            src={meme.image_url} 
+                            alt={meme.caption} 
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
 
-            {/* Memes List */}
-            <div className="space-y-4">
-              {filteredMemes.map((meme, index) => (
-                <div
-                  key={meme.id}
-                  className="p-6 rounded-lg border border-border bg-card hover:border-primary transition-all"
-                >
-                  <div className="flex gap-4 items-start">
-                    {/* Rank Badge */}
-                    <div className="flex-shrink-0">
-                      <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg ${
-                        index === 0 ? 'bg-yellow-500/20 text-yellow-600' :
-                        index === 1 ? 'bg-gray-400/20 text-gray-600' :
-                        index === 2 ? 'bg-orange-600/20 text-orange-600' :
-                        'bg-muted text-muted-foreground'
-                      }`}>
-                        {index + 1}
-                      </div>
-                    </div>
+                        {/* Content */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex-1">
+                              <h3 className="text-xl font-bold text-foreground line-clamp-2 mb-1 group-hover:text-primary transition-colors">
+                                {meme.caption || 'Untitled Meme'}
+                              </h3>
+                              <div className="text-sm text-muted-foreground flex items-center gap-2">
+                                {meme.template && (
+                                  <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-semibold">
+                                    {meme.template}
+                                  </span>
+                                )}
+                                • 
+                                <span>{new Date(meme.created_at).toLocaleDateString()}</span>
+                              </div>
+                            </div>
+                          </div>
 
-                    {/* Content */}
-                    <div className="flex-1">
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <h3 className="text-lg font-semibold text-foreground line-clamp-2 flex items-center gap-2">
-                            {meme.caption}
-                            {meme.trending && (
-                              <Flame size={18} className="text-orange-500 flex-shrink-0" />
-                            )}
-                          </h3>
-                          <div className="text-sm text-muted-foreground mt-1">
-                            by <span className="font-semibold">{meme.creator}</span> • {meme.timestamp}
+                          {/* Actions */}
+                          <div className="flex gap-3 mt-4">
+                            <button
+                              onClick={() => handleVote(meme.id)}
+                              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-primary/10 hover:text-primary font-semibold transition-all"
+                            >
+                              <ThumbsUp size={18} />
+                              {meme.votes || 0}
+                            </button>
+                            <button className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-muted-foreground transition-all">
+                              <Share2 size={18} />
+                              Share
+                            </button>
                           </div>
                         </div>
-                        <div className="text-sm bg-muted px-3 py-1 rounded-full text-muted-foreground flex-shrink-0">
-                          {meme.template}
-                        </div>
-                      </div>
-
-                      {/* Actions */}
-                      <div className="flex gap-3 mt-4">
-                        <button
-                          onClick={() => handleVote(meme.id)}
-                          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold transition-all ${
-                            userVotes.has(meme.id)
-                              ? 'bg-primary/20 text-primary'
-                              : 'hover:bg-muted text-muted-foreground'
-                          }`}
-                        >
-                          <ThumbsUp size={18} />
-                          {meme.votes}
-                        </button>
-                        <button className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-muted text-muted-foreground transition-all">
-                          <Share2 size={18} />
-                          Share
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Sidebar - Top Creators */}
-          <div className="lg:col-span-1">
-            <div className="sticky top-20">
-              <div className="p-6 rounded-lg border border-border bg-card">
-                <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
-                  <Trophy size={20} className="text-yellow-500" />
-                  Top Creators
-                </h3>
-                <div className="space-y-4">
-                  {topCreators.map((creator, index) => (
-                    <div key={index} className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
-                        index === 0 ? 'bg-yellow-500/20 text-yellow-600' :
-                        index === 1 ? 'bg-gray-400/20 text-gray-600' :
-                        'bg-orange-600/20 text-orange-600'
-                      }`}>
-                        {index + 1}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-foreground truncate">@{creator.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {creator.memes} memes • {creator.votes} votes
-                        </p>
                       </div>
                     </div>
                   ))}
                 </div>
-              </div>
+              )}
+            </div>
 
-              {/* Stats Card */}
-              <div className="mt-6 p-6 rounded-lg border border-border bg-card">
-                <h3 className="text-lg font-bold mb-4">Community Stats</h3>
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Total Votes</p>
-                    <p className="text-2xl font-bold text-primary">48.2K</p>
+            {/* Sidebar - Quick Stats */}
+            <div className="lg:col-span-1">
+              <div className="sticky top-20 space-y-6">
+                <div className="p-6 rounded-2xl border border-white/10 bg-card/50 backdrop-blur-sm">
+                  <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
+                    <Trophy size={20} className="text-yellow-500" />
+                    Your Stats
+                  </h3>
+                  <div className="space-y-6">
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">Memes Created</p>
+                      <p className="text-3xl font-bold text-primary">{memes.length}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">Total Votes Received</p>
+                      <p className="text-3xl font-bold text-purple-500">
+                        {memes.reduce((acc, m) => acc + (m.votes || 0), 0)}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Memes Created</p>
-                    <p className="text-2xl font-bold text-purple-500">2,547</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Active Creators</p>
-                    <p className="text-2xl font-bold text-pink-500">1,203</p>
-                  </div>
+                </div>
+
+                <div className="p-6 rounded-2xl border border-white/10 bg-card/50 backdrop-blur-sm">
+                  <h3 className="text-lg font-bold mb-4">Meme Tips</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Try using more relatable captions to get more engagement from the community!
+                  </p>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

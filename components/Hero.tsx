@@ -1,7 +1,7 @@
 import { Sparkles, Zap, Users } from 'lucide-react';
 
 interface HeroProps {
-  onNavigate: (section: 'home' | 'generator' | 'leaderboard') => void;
+  onNavigate: (section: 'home' | 'generator' | 'history') => void;
 }
 
 export default function Hero({ onNavigate }: HeroProps) {
@@ -43,11 +43,11 @@ export default function Hero({ onNavigate }: HeroProps) {
             <span className="absolute inset-0 bg-white/20 -left-full group-hover:left-0 transition-all duration-500" />
           </button>
           <button
-            onClick={() => onNavigate('leaderboard')}
+            onClick={() => onNavigate('history')}
             className="px-8 py-4 border-2 border-primary text-foreground rounded-lg font-semibold hover:bg-primary/10 transition-all duration-300 flex items-center justify-center gap-2"
           >
             <Users size={20} />
-            View Leaderboard
+            My History
           </button>
         </div>
 
